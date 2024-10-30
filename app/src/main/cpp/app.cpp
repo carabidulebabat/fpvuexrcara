@@ -1,18 +1,29 @@
 #include <stereokit.h>
 #include <stereokit_ui.h>
 #include <random>
+#include <fstream>
+#include <time.h>
+#include <opencv2/opencv.hpp>
 #include <jni.h>
 
 #include <android/log.h>
 #include <android/asset_manager_jni.h>
 #include "videonative/VideoPlayer.h"
-#include <opencv2/opencv.hpp>
-#include <time.h>
 #include "wfbngrtl8812/WfbngLink.hpp"
 #include "mavlink/mavlink.h"
+#include "ChannelSelector.h"
+#include "Helpers.h"
 
 using namespace sk;
 using namespace std::chrono;
+
+WfbngLink wfb;
+JNIEnv* env = nullptr;
+JavaVM* lJavaVM = nullptr;
+
+ChannelSelector channelSelector(lJavaVM, wfb);
+
+pose_t plane_pose = {{0.13, -0.01,-2.0f}, {0,0,0,1}};
 
 int32_t rtl8812UsbPath(JNIEnv* env,struct android_app *app);
 std::string copyGsKey(JNIEnv * env, android_app *app);
@@ -31,7 +42,7 @@ tex_t vid0;
 cv::Mat buffer0;
 
 // Screen size
-float screen_width = 2.0;
+float screen_width = 3.0;
 float screen_aspect_ratio = 9.0/16.0;
 
 // Video stats
@@ -52,9 +63,9 @@ struct mavlink_data mavlink_data;
 void onNewFrame(const uint8_t* data,const std::size_t data_length, int32_t width, int32_t height) {
     video_width = width; video_height = height;
     cv::Mat yuv(height + height / 2, width, CV_8UC1, const_cast<uint8_t*>(data)); //
-    cv::Mat rgbFrame;
-    cv::cvtColor(yuv, rgbFrame, cv::COLOR_YUV2BGR_NV21);
-    cv::cvtColor(rgbFrame, buffer0, cv::COLOR_RGB2RGBA);
+
+    cv::cvtColor(yuv, buffer0, cv::COLOR_YUV2BGRA_NV21);
+
     decoded_frame_period++;
     auto now=steady_clock::now();
     if ((now-decoded_period_start)>fps_log_interval) {
@@ -66,24 +77,10 @@ void onNewFrame(const uint8_t* data,const std::size_t data_length, int32_t width
 
 bool app_init(struct android_app *state)
 {
-    JavaVM* lJavaVM = state->activity->vm;
-    JNIEnv* env = nullptr;
+    lJavaVM = state->activity->vm;
     bool lThreadAttached = false;
-    // Get JNIEnv from lJavaVM using GetEnv to test whether
-    // thread is attached or not to the VM. If not, attach it
-    // (and note that it will need to be detached at the end
-    //  of the function).
-    switch (lJavaVM->GetEnv((void**)&env, JNI_VERSION_1_6)) {
-        case JNI_OK: break;
-        case JNI_EVERSION: return -1;
-        case JNI_EDETACHED: {
-            jint lResult = lJavaVM->AttachCurrentThread(&env, nullptr);
-            if(lResult == JNI_ERR) {
-                return -1;
-            }
-            lThreadAttached = true;
-        } break;
-    }
+
+    attachThread(env, lJavaVM, lThreadAttached);
 
     log_set_filter(log_error); // log_error shows problem
     sk_settings_t settings = {};
@@ -103,14 +100,20 @@ bool app_init(struct android_app *state)
     if (key_path == "" ){
         return false;
     }
+
     auto fd = rtl8812UsbPath(env, state);
     if (fd > 0) {
-        std::thread wfb_thread([&fd, &env, key_path]() {
-            WfbngLink wfb(env, fd,  key_path.c_str());
-            wfb.run(env, 149);
+        std::thread wfb_thread([&fd, key_path]() {
+            WfbngLink wfb(env, fd, key_path.c_str());
+
+            ::wfb = std::move(wfb);
+            while(true)
+                ::wfb.run(env, channelSelector.currentChannel());
         });
         wfb_thread.detach();
     } else {
+        __android_log_write(ANDROID_LOG_ERROR, "readChannelValue", "NO ADAPTER FOUNT");
+
         no_adapter = true;
     }
 
@@ -144,18 +147,17 @@ void app_handle_cmd(android_app *evt_app, int32_t cmd)
 {
     switch (cmd)
     {
-    case APP_CMD_INIT_WINDOW:
-    case APP_CMD_WINDOW_RESIZED:
-    case APP_CMD_CONFIG_CHANGED:
-        sk_set_window(evt_app->window);
-        break;
-    case APP_CMD_TERM_WINDOW:
-        sk_set_window(nullptr);
-        break;
+        case APP_CMD_INIT_WINDOW:
+        case APP_CMD_WINDOW_RESIZED:
+        case APP_CMD_CONFIG_CHANGED:
+            sk_set_window(evt_app->window);
+            break;
+        case APP_CMD_TERM_WINDOW:
+            sk_set_window(nullptr);
+            break;
     }
 }
 
-pose_t plane_pose = {{0, 0.05,-1.5f}, {0,0,0,1}};
 
 void app_step()
 {
@@ -167,6 +169,12 @@ void app_step()
             displayed_period_start = now;
             displayed_frame_period = 0;
         }
+        handed_ handedness{handed_right};
+        auto input = input_controller(handed_::handed_right);
+
+        bool x1_pressed = input->x1 == button_state_::button_state_active;
+        channelSelector.update(x1_pressed);
+
         if(no_adapter) {
             std::string txt = "No wifi adapter.";
             text_add_at(txt.c_str(),
@@ -194,6 +202,7 @@ void app_step()
         }
     });
 }
+
 
 void app_exit()
 {

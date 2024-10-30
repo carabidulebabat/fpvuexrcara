@@ -7,6 +7,7 @@
 
 class WfbngLink{
 public:
+    WfbngLink() = default;
     WfbngLink(JNIEnv * env, int fd, const char *key);
     int run(JNIEnv *env, int wifiChannel);
     void stop(JNIEnv *env);

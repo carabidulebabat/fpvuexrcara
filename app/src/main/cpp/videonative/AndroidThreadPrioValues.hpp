@@ -64,10 +64,10 @@ namespace AndroidThreadPriorityValues{
 
 // All these values are for FPV_VR
 namespace FPV_VR_PRIORITY{
-    constexpr int CPU_PRIORITY_GLRENDERER_STEREO_FB=-19; //This one needs a whole CPU core all the time anyways
+    constexpr int CPU_PRIORITY_GLRENDERER_STEREO_FB=-16; //This one needs a whole CPU core all the time anyways
     constexpr int CPU_PRIORITY_GLRENDERER_STEREO=-16; //The GL thread also should get 1 whole cpu core
-    constexpr int CPU_PRIORITY_UDPRECEIVER_VIDEO=-16;  //needs low latency and does not use the cpu that much
-    constexpr int CPU_PRIORITY_DECODER_OUTPUT=-16;     //needs low latency and does not use the cpu that much
+    constexpr int CPU_PRIORITY_UDPRECEIVER_VIDEO=-20;  //needs low latency and does not use the cpu that much
+    constexpr int CPU_PRIORITY_DECODER_OUTPUT=-19;     //needs low latency and does not use the cpu that much
     constexpr int CPU_PRIORITY_UVC_FRAME_CALLBACK=-17; //needs low latency but uses CPU a lot (decoding). More prio than GLRenderer
     // These are much lower
     constexpr int CPU_PRIORITY_GLRENDERER_MONO=-4; //only shows the OSD not video

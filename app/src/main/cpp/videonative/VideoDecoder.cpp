@@ -115,9 +115,13 @@ void VideoDecoder::configureStartDecoder(){
     AMediaFormat* format=AMediaFormat_new();
     // Only for android 31
     AMediaFormat_setString(format,AMEDIAFORMAT_KEY_MIME,MIME.c_str());
-//    AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_LATENCY, 1);
+
+// AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_COLOR_FORMAT, 2130747392);
+
+   AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_LOW_LATENCY, 1);
 //    // MediaCodec supports two priorities: 0 - realtime, 1 - best effort
-//    AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_PRIORITY, 0);
+   AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_PRIORITY, 0);
+
     if(IS_H265){
         h265_configureAMediaFormat(mKeyFrameFinder,format);
     }else{
@@ -149,7 +153,8 @@ void VideoDecoder::feedDecoder(const NALU& nalu){
     if(IS_H265 && (nalu.isSPS() || nalu.isPPS() || nalu.isVPS())){
         // looks like h265 doesn't like feeding sps/pps/vps during decoding
         // it could also be that they have to be merged together, but for now just skip them
-        return;
+        // II: this doesn't work on Quest3, so I commented the return out
+        //        return;
     }
     // Hm, for some reason not feeding AUDs to the decoder increases latency for the x264/testVideo.h264 file
     //if(nalu.isAUD()){
@@ -172,7 +177,7 @@ void VideoDecoder::feedDecoder(const NALU& nalu){
             //this timestamp will be later used to calculate the decoding latency
             const uint64_t presentationTimeUS=(uint64_t)duration_cast<microseconds>(steady_clock::now().time_since_epoch()).count();
             //Doing so causes garbage bug TODO investigate
-            //const auto flag=nalu.isPPS() || nalu.isSPS() ? AMEDIACODEC_BUFFER_FLAG_CODEC_CONFIG : 0;
+            const auto flag=nalu.isPPS() || nalu.isSPS() ? AMEDIACODEC_BUFFER_FLAG_CODEC_CONFIG : 0;
             //AMediaCodec_queueInputBuffer(decoder.codec, (size_t)index, 0, (size_t)nalu.data_length,presentationTimeUS, flag);
             AMediaCodec_queueInputBuffer(decoder.codec, (size_t)index, 0, (size_t)nalu.getSize(),presentationTimeUS,0);
             waitForInputB.add(steady_clock::now() - now);

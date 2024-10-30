@@ -8,7 +8,7 @@ android {
 
     defaultConfig {
         applicationId = "com.geehe.fpvue_xr"
-        minSdk = 28
+        minSdk = 32
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
@@ -17,7 +17,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         externalNativeBuild {
             cmake {
-                arguments.add("-DANDROID_PLATFORM=24") //24
+                arguments.add("-DANDROID_PLATFORM=32") //24
                 arguments.add("-DANDROID_STL=c++_shared")
                 cppFlags.add("-std=c++20")
             }
@@ -46,6 +46,7 @@ android {
             path("src/main/cpp/CMakeLists.txt")
         }
     }
+    ndkVersion = "26.1.10909125"
 }
 
 dependencies {
