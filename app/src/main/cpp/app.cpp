@@ -5,14 +5,19 @@
 #include <time.h>
 #include <opencv2/opencv.hpp>
 #include <jni.h>
-
+#include "thread"
 #include <android/log.h>
+#include "VideoDecoder.h"
 #include <android/asset_manager_jni.h>
 #include "videonative/VideoPlayer.h"
 #include "wfbngrtl8812/WfbngLink.hpp"
+//#include "WfbngLink.cpp"
 #include "mavlink/mavlink.h"
 #include "ChannelSelector.h"
+#include "VideoDecoder.h"
 #include "Helpers.h"
+//#include "VideoDecoder.cpp"
+
 
 using namespace sk;
 using namespace std::chrono;
@@ -23,7 +28,12 @@ JavaVM* lJavaVM = nullptr;
 
 ChannelSelector channelSelector(lJavaVM, wfb);
 
+
+
 pose_t plane_pose = {{0.13, -0.01,-2.0f}, {0,0,0,1}};
+
+
+
 
 int32_t rtl8812UsbPath(JNIEnv* env,struct android_app *app);
 std::string copyGsKey(JNIEnv * env, android_app *app);
@@ -35,14 +45,27 @@ static long currentTimeInNanos() {
     return (res.tv_sec * NANOS_IN_SECOND) + res.tv_nsec;
 }
 
+
+bool connect_ = false;
+std::vector<int> channels = {149, 165, 169, 161, 173};
+
+
+
 // Video conversion
-mesh_t     plane_mesh;
+mesh_t  plane_mesh;
 material_t plane_mat;
+
+//mesh_t background_mesh;
+//material_t  background_mat;
+
 tex_t vid0;
 cv::Mat buffer0;
 
 // Screen size
 float screen_width = 3.0;
+//float background_widght = 3.0;
+//float background_aspect_ratio = 9.0/16.0;
+//float screen_height = 3.0;
 float screen_aspect_ratio = 9.0/16.0;
 
 // Video stats
@@ -50,10 +73,19 @@ int32_t video_width = 0;
 int32_t video_height = 0;
 int framerate = 0;
 int screen_refresh_rate = 0;
-bool no_adapter = 0;
 
+
+int rssi = WFB_PACKET_DATA;
+
+bool no_adapter = 0;
 int decoded_frame_period = 0;
+
+float DecodingInfo::avgDecodingTime_ms = 0.0f;
+float DecodingInfo::currentKiloBitsPerSecond = 0.0f;
+
 time_point decoded_period_start = steady_clock::now();
+time_point<steady_clock> last_frame_time = steady_clock::now();
+time_point<steady_clock> current_frame_time = steady_clock::now();
 int displayed_frame_period = 0;
 time_point displayed_period_start = steady_clock::now();
 duration fps_log_interval = std::chrono::seconds(1);
@@ -65,15 +97,18 @@ void onNewFrame(const uint8_t* data,const std::size_t data_length, int32_t width
     cv::Mat yuv(height + height / 2, width, CV_8UC1, const_cast<uint8_t*>(data)); //
 
     cv::cvtColor(yuv, buffer0, cv::COLOR_YUV2BGRA_NV21);
+    displayed_frame_period = displayed_frame_period + 1;
 
     decoded_frame_period++;
     auto now=steady_clock::now();
     if ((now-decoded_period_start)>fps_log_interval) {
         framerate = decoded_frame_period;
         decoded_period_start = now;
+        current_frame_time = now;
         decoded_frame_period = 0;
     }
-}
+
+    }
 
 bool app_init(struct android_app *state)
 {
@@ -89,6 +124,9 @@ bool app_init(struct android_app *state)
     settings.android_activity = state->activity->clazz;
     settings.android_java_vm = state->activity->vm;
     settings.display_preference = display_mode_mixedreality;
+    //settings.assets_folder = "/Users/guerlaindumont/AndroidStudioProjects/FPVue_xr_ihor/app/src/main/assets/";
+
+
 
     if (!sk_init(settings))
     {
@@ -102,13 +140,15 @@ bool app_init(struct android_app *state)
     }
 
     auto fd = rtl8812UsbPath(env, state);
+
+
     if (fd > 0) {
         std::thread wfb_thread([&fd, key_path]() {
             WfbngLink wfb(env, fd, key_path.c_str());
 
             ::wfb = std::move(wfb);
-            while(true)
-                ::wfb.run(env, channelSelector.currentChannel());
+             while(true)
+               ::wfb.run(env, 161);
         });
         wfb_thread.detach();
     } else {
@@ -127,6 +167,14 @@ bool app_init(struct android_app *state)
     });
     mavlink_thread.detach();
 
+    //background mesh
+    //background_mesh = mesh_gen_plane({background_widght*background_aspect_ratio},{0,0,1},{0,1,0});
+    //background_mat = material_copy_id(default_id_font);
+    //vid1 = tex_create(tex_type_image,tex_format_rgba32);
+    //tex_set_address(tex_create_file("test.png", false), tex_address_clamp);
+    //material_set_texture(background_mat, "diffuse", tex_create_file("test.png", false));
+
+
     // Video decoding
     plane_mesh = mesh_gen_plane({screen_width,screen_width*screen_aspect_ratio},{0,0,1},{0,1,0});
     plane_mat = material_copy_id(default_id_material_unlit);
@@ -142,6 +190,7 @@ bool app_init(struct android_app *state)
     p->start();
     return true;
 }
+
 
 void app_handle_cmd(android_app *evt_app, int32_t cmd)
 {
@@ -160,6 +209,8 @@ void app_handle_cmd(android_app *evt_app, int32_t cmd)
 
 
 void app_step()
+
+
 {
     sk_step([]() {
         displayed_frame_period++;
@@ -168,34 +219,43 @@ void app_step()
             screen_refresh_rate = displayed_frame_period;
             displayed_period_start = now;
             displayed_frame_period = 0;
-        }
-        handed_ handedness{handed_right};
-        auto input = input_controller(handed_::handed_right);
 
-        bool x1_pressed = input->x1 == button_state_::button_state_active;
-        channelSelector.update(x1_pressed);
+
+        }
+
 
         if(no_adapter) {
             std::string txt = "No wifi adapter.";
             text_add_at(txt.c_str(),
                         matrix_trs({-0.1, -0.1, -1.4f}, quat_identity, vec3{-1.0f, 1.0f, 1.0f}),
                         0, text_align_bottom_left);
+
+
         } else {
             if (!buffer0.empty()) {
+                // ui render show video while connect
                 tex_set_colors(vid0, buffer0.cols, buffer0.rows, (void *) buffer0.datastart);
                 ui_handle_begin("Plane", plane_pose, mesh_get_bounds(plane_mesh), false);
                 render_add_mesh(plane_mesh, plane_mat, matrix_identity);
+
                 ui_handle_end();
+
+
             } else {
-                std::string txt = "No data.";
+
+                std::string txt = "wait video";
                 text_add_at(txt.c_str(),
                             matrix_trs({-0.1, -0.1, -1.4f}, quat_identity, vec3{-1.0f, 1.0f, 1.0f}),
-                            0, text_align_bottom_left);
-            }
+                            0, text_align_bottom_center);
+
+
+                }
         }
 
-        std::string txt = "" + std::to_string(video_width) + "x" + std::to_string(video_height) + "\t" + std::to_string(framerate) + "fps\t" +  std::to_string(screen_refresh_rate) + " Hz";
-        text_add_at(txt.c_str(), matrix_trs({-0.1,-0.52,-1.4f}, quat_identity, vec3{-1.0f, 1.0f, 1.0f}), 0, text_align_bottom_left);
+        std::string txt = "" + std::to_string(DecodingInfo::currentKiloBitsPerSecond) + "\t" "mbps" + std::to_string(video_height) + "\t" +  std::to_string(DecodingInfo::avgDecodingTime_ms) + "ms" + std::to_string(rssi);
+        text_add_at(txt.c_str(), matrix_trs({-0.1,-0.52,-1.4f}, quat_identity, vec3{-1.0f, 1.0f, 1.0f}), 0, text_align_bottom_center);
+
+
         if (mavlink_data.telemetry_battery>0){
             std::string txt1 = "" + std::to_string(mavlink_data.telemetry_battery/1000.0) + "V";
             text_add_at(txt1.c_str(), matrix_trs({-0.4,-0.52,-1.4f}, quat_identity, vec3{-1.0f, 1.0f, 1.0f}), 0, text_align_bottom_left);
