@@ -250,41 +250,9 @@ int32_t handle_input(struct android_app *app, AInputEvent *event) {
     }
     if (AInputEvent_getType(event) == AINPUT_EVENT_TYPE_KEY &&
         AKeyEvent_getKeyCode(event) == AKEYCODE_VOLUME_DOWN) {        // Attacher le thread courant pour obtenir un JNIEnv*
-        JNIEnv* env = nullptr;
-        if (g_javaVM->AttachCurrentThread(&env, nullptr) != JNI_OK) {
-            __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "Erreur lors de l'attachement du thread courant.");
-            return 0;
-        }
-
-        if (g_mainActivity == nullptr) {
-            __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "g_mainActivity non initialisé !");
-            g_javaVM->DetachCurrentThread();
-            return 0;
-        }
-
-        // Récupérer la classe de l'objet MainActivity
-        jclass clazz = env->GetObjectClass(g_mainActivity);
-        if (clazz == nullptr) {
-            __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "Classe MainActivity introuvable !");
-            g_javaVM->DetachCurrentThread();
-            return 0;
-        }
-
-        // Obtenir l'ID de la méthode Java "startRec" qui est déclarée en Java comme "public void startRec()"
-        jmethodID methodId = env->GetMethodID(clazz, "startRec", "()V");
-        if (methodId == nullptr) {
-            __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "Méthode startRec() introuvable !");
-            g_javaVM->DetachCurrentThread();
-            return 0;
-        }
-
-        // Appeler la méthode startRec() sur l'objet g_mainActivity
-        env->CallVoidMethod(g_mainActivity, methodId);
-        __android_log_print(ANDROID_LOG_INFO, LOG_TAG, "startRec() appelé depuis le natif.");
-
-        // Détacher le thread si nécessaire (selon votre architecture)
-        g_javaVM->DetachCurrentThread();
-
+        channelIndex = (channelIndex - 1) % channels.size();
+        currentChannel = channels[channelIndex];
+        wfb.stop(env);
         return 1;
     }
 
