@@ -21,3 +21,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "FPVue_xr"
 include(":app")
+include(":app:myapplication")

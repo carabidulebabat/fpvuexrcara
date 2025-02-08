@@ -21,10 +21,10 @@ struct DecodingInfo{
     long nNALUSFeeded=0;
     long nDecodedFrames=0;
     float currentFPS=0;
-    float currentKiloBitsPerSecond=0;
+    static float currentKiloBitsPerSecond;
     float avgParsingTime_ms=0;
     float avgWaitForInputBTime_ms=0;
-    float avgDecodingTime_ms=0;
+    static float avgDecodingTime_ms;
     bool operator==(const DecodingInfo& d2)const{
         return nNALU==d2.nNALU && nNALUSFeeded==d2.nNALUSFeeded && currentFPS==d2.currentFPS &&
                currentKiloBitsPerSecond==d2.currentKiloBitsPerSecond && avgParsingTime_ms==d2.avgParsingTime_ms &&

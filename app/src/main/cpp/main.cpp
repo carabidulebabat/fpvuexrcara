@@ -1,23 +1,37 @@
 
 #include <stdlib.h>
+#include <jni.h>
+#include <android/log.h>
+#include <unistd.h>
+
+#define LOG_TAG "MainApp"
+#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 
 bool app_init(struct android_app *state);
 void app_handle_cmd(android_app *evt_app, int32_t cmd);
 void app_step();
 void app_exit();
-
+extern void startScreenRecording(struct android_app *app);
 android_app *app;
 bool app_run = true;
 void android_request_permission(struct android_app *app, const char *permission);
 bool android_has_permission(struct android_app *app, const char *perm_name);
+extern int32_t handle_input(struct android_app *app, AInputEvent *event);
+
+
+
 
 void android_main(struct android_app *state)
+
 {
+
     app = state;	if (!android_has_permission(app, "READ_EXTERNAL_STORAGE")) {
         android_request_permission(app, "READ_EXTERNAL_STORAGE");
     }
 
     app->onAppCmd = app_handle_cmd;
+    app->onInputEvent = handle_input;
+
 
     if (!app_init(state)) return;
 
@@ -25,8 +39,10 @@ void android_main(struct android_app *state)
     {
         int events;
         struct android_poll_source *source;
+
         while (ALooper_pollAll(0, nullptr, &events, (void **)&source) >= 0)
         {
+
             if (source != nullptr)
                 source->process(state, source);
             if (state->destroyRequested != 0)
