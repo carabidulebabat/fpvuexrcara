@@ -11,13 +11,13 @@ bool app_init(struct android_app *state);
 void app_handle_cmd(android_app *evt_app, int32_t cmd);
 void app_step();
 void app_exit();
-extern void startScreenRecording(struct android_app *app);
+//JNIEnv* env = nullptr;
 android_app *app;
 bool app_run = true;
 void android_request_permission(struct android_app *app, const char *permission);
 bool android_has_permission(struct android_app *app, const char *perm_name);
 extern int32_t handle_input(struct android_app *app, AInputEvent *event);
-
+extern void updateRecordingState(JNIEnv* env);
 
 
 
@@ -39,6 +39,8 @@ void android_main(struct android_app *state)
     {
         int events;
         struct android_poll_source *source;
+        JNIEnv *env;
+        updateRecordingState(env);
 
         while (ALooper_pollAll(0, nullptr, &events, (void **)&source) >= 0)
         {

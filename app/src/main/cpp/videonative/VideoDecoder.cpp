@@ -265,8 +265,9 @@ void VideoDecoder::checkOutputLoop() {
         if(delta>DECODING_INFO_RECALCULATION_INTERVAL){
             decodingInfo.lastCalculation=steady_clock::now();
             decodingInfo.currentFPS=(float)nDecodedFrames.getDeltaSinceLastCall()/(float)duration_cast<seconds>(delta).count();
-            decodingInfo.currentKiloBitsPerSecond=((float)nNALUBytesFed.getDeltaSinceLastCall()/duration_cast<seconds>(delta).count())/1024.0f*8.0f;
+            decodingInfo.currentKiloBitsPerSecond=((float)nNALUBytesFed.getDeltaSinceLastCall()/duration_cast<seconds>(delta).count())/1024.0f*8.0f/1000;
             //and recalculate the avg latencies. If needed,also print the log.
+
             decodingInfo.avgDecodingTime_ms=decodingTime.getAvg_ms();
             decodingInfo.avgParsingTime_ms=parsingTime.getAvg_ms();
             decodingInfo.avgWaitForInputBTime_ms=waitForInputB.getAvg_ms();

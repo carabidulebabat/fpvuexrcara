@@ -18,17 +18,15 @@
 #include "VideoDecoder.h"
 #include "Helpers.h"
 //#include "VideoDecoder.cpp"
-
+#include <chrono>
 #include <android_native_app_glue.h>
 
-
+// Define a tag for logging
 using namespace sk;
 using namespace std::chrono;
-
 WfbngLink wfb;
 JNIEnv* env = nullptr;
 JavaVM* lJavaVM = nullptr;
-
 
 pose_t plane_pose = {{0.13, -0.01,-2.0f}, {0,0,0,1}};
 
@@ -41,39 +39,35 @@ static long currentTimeInNanos() {
     clock_gettime(CLOCK_MONOTONIC, &res);
     return (res.tv_sec * NANOS_IN_SECOND) + res.tv_nsec;
 }
-
-#define LOG_TAG "NativeCode"
-#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
-#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
-JavaVM* g_javaVM = nullptr;
-jobject g_mainActivity = nullptr;
-
-extern "C" {
-
-// Cette fonction sera appelée lors de l'initialisation dans MainActivity.onCreate()
-JNIEXPORT void JNICALL
-Java_com_example_myapplication_MainActivity_nativeInit(JNIEnv *env, jobject thiz) {
-    // Sauvegarder la référence globale de l'objet MainActivity pour pouvoir y accéder depuis d'autres threads
-    g_mainActivity = env->NewGlobalRef(thiz);
-    __android_log_print(ANDROID_LOG_INFO, LOG_TAG, "g_mainActivity initialisé !");
-}
-}
-extern "C"
-JNIEXPORT void JNICALL
-Java_com_example_myapplication_MainActivity_StartRec(JNIEnv *env, jobject thiz) {
-    // Ici, on peut utiliser g_mainActivity ou thiz (si c'est la même instance)
-    jclass clazz = env->GetObjectClass(g_mainActivity);
-    if (clazz == nullptr) {
-        LOGE("nativeStartRec: Classe MainActivity non trouvée !");
+JNIEXPORT void JNICALL Java_com_geehe_fpvue_1xr_NativeRecorder_startRecordingNative(JNIEnv* env, jobject thiz) {
+    // Récupérer la classe ScreenRecordingService
+    jclass serviceClass = env->FindClass("com/geehe/fpvue_xr/ScreenRecordingService");
+    if (serviceClass == NULL) {
+        //__android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "ScreenRecordingService class not found");
         return;
     }
-    jmethodID methodId = env->GetMethodID(clazz, "startRec", "()V");
-    if (methodId == nullptr) {
-        LOGE("nativeStartRec: Méthode startRec() non trouvée !");
+    // Récupérer la méthode statique startRecordingStatic() : signature "()V"
+    jmethodID startMethod = env->GetStaticMethodID(serviceClass, "startRecordingStatic", "()V");
+    if (startMethod == NULL) {
+        //__android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "startRecordingStatic method not found");
         return;
     }
-    env->CallVoidMethod(g_mainActivity, methodId);
-    LOGI("nativeStartRec: Appel de startRec() réussi.");
+
+}
+JNIEXPORT void JNICALL Java_com_geehe_fpvue_1xr_NativeRecorder_stopRecordingNative(JNIEnv* env, jobject thiz) {
+    // Récupérer la classe ScreenRecordingService
+    jclass serviceClass = env->FindClass("com/geehe/fpvue_xr/ScreenRecordingService");
+    if (serviceClass == NULL) {
+    //    __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "ScreenRecordingService class not found");
+        return;
+    }
+    // Récupérer la méthode statique stopRecordingStatic() : signature "()V"
+    jmethodID stopMethod = env->GetStaticMethodID(serviceClass, "stopRecordingStatic", "()V");
+    if (stopMethod == NULL) {
+       // __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "stopRecordingStatic method not found");
+        return;
+    }
+
 }
 
 
@@ -239,7 +233,11 @@ void app_handle_cmd(android_app *evt_app, int32_t cmd) {
     }
 }
 
+
+
 int32_t handle_input(struct android_app *app, AInputEvent *event) {
+
+
     if (AInputEvent_getType(event) == AINPUT_EVENT_TYPE_KEY &&
         AKeyEvent_getKeyCode(event) == AKEYCODE_VOLUME_UP) {
         channelIndex = (channelIndex + 1) % channels.size();
@@ -257,6 +255,50 @@ int32_t handle_input(struct android_app *app, AInputEvent *event) {
     }
 
     return 0;
+}
+
+// Variable globale pour suivre l'état de l'enregistrement
+
+
+// Fonction pour mettre à jour l'état d'enregistrement en fonction du bitrate actuel
+void updateRecordingState(JNIEnv* env) {
+   static bool recordingActive = false;
+
+    // Si le bitrate est > 0 et que l'enregistrement n'est pas encore démarré
+    if (DecodingInfo::currentKiloBitsPerSecond > 0 && !recordingActive) {
+        // Trouver la classe ScreenRecordingService
+        jclass serviceClass = env->FindClass("com/geehe/fpvue_xr/ScreenRecordingService");
+        if (!serviceClass) {
+            __android_log_print(ANDROID_LOG_ERROR, "ScreenRecordingService", "Classe ScreenRecordingService introuvable");
+            return;
+        }
+        // Récupérer la méthode statique startRecordingStatic()
+        jmethodID startRecordingMethod = env->GetStaticMethodID(serviceClass, "startRecordingStatic", "()V");
+        if (!startRecordingMethod) {
+            __android_log_print(ANDROID_LOG_ERROR, "ScreenRecordingService", "Méthode startRecordingStatic non trouvée");
+            return;
+        }
+        // Appeler la méthode statique
+        env->CallStaticVoidMethod(serviceClass, startRecordingMethod);
+        __android_log_print(ANDROID_LOG_INFO, "ScreenRecordingService", "Enregistrement démarré");
+        recordingActive = true;
+    }
+        // Si le bitrate est égal à 0 et que l'enregistrement est en cours
+    else if (DecodingInfo::currentKiloBitsPerSecond == 0 && recordingActive) {
+        jclass serviceClass = env->FindClass("com/geehe/fpvue_xr/ScreenRecordingService");
+        if (!serviceClass) {
+            __android_log_print(ANDROID_LOG_ERROR, "ScreenRecordingService", "Classe ScreenRecordingService introuvable");
+            return;
+        }
+        jmethodID stopRecordingMethod = env->GetStaticMethodID(serviceClass, "stopRecordingStatic", "()V");
+        if (!stopRecordingMethod) {
+            __android_log_print(ANDROID_LOG_ERROR, "ScreenRecordingService", "Méthode stopRecordingStatic non trouvée");
+            return;
+        }
+        env->CallStaticVoidMethod(serviceClass, stopRecordingMethod);
+        __android_log_print(ANDROID_LOG_INFO, "ScreenRecordingService", "Enregistrement arrêté");
+        recordingActive = false;
+    }
 }
 
 
@@ -278,7 +320,7 @@ void app_step() {
             text_add_at(txt.c_str(),
                         matrix_trs({-0.1, -0.1, -1.4f}, quat_identity, vec3{-1.0f, 1.0f, 1.0f}),
                         0, text_align_bottom_left);
-
+            //env->CallVoidMethod(thisObj, startRecordingID);
 
         } else {
             if (!buffer0.empty()) {
@@ -465,5 +507,6 @@ int32_t rtl8812UsbPath(JNIEnv *env, struct android_app *app) {
     }
     return -1;
 }
+
 
 

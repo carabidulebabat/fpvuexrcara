@@ -36,6 +36,8 @@ add_subdirectory(wfbngrtl8812)
 ## mavlink
 add_library(mavlink STATIC ${CMAKE_SOURCE_DIR}/mavlink/mavlink.cpp)
 
+
+
 # OpenCV
 include(FetchContent)
 FetchContent_Declare(
@@ -72,4 +74,5 @@ target_link_libraries(native-activity
         wfbngrtl8812
         stereokitc
         videonative
+
         ${OpenCV_LIBS})

@@ -3,7 +3,7 @@ plugins {
 }
 
 android {
-    namespace = "com.dvr.screenrecorder"
+
     namespace = "com.geehe.fpvue_xr"
     compileSdk = 34
 
